@@ -1,0 +1,48 @@
+services:
+  realtime_humble:
+    image: image_rcm_panda
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    container_name: my_container_rcm
+    tty: true
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+    cap_add:
+      - SYS_NICE
+    ulimits:
+      rtprio: 99
+      rttime: -1
+      memlock: 8428281856
+    network_mode: host
+    devices:
+      - "/dev/dri:/dev/dri"
+    volumes:
+      - /home/yu/RCM_mujoco_ros2:/home/user/humble_ws/src
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
+# services:
+#   realtime_humble:
+#     image: image_rcm_panda
+#     build:
+#       context: ./
+#       dockerfile: Dockerfile
+#     container_name: my_container_rcm_panda
+#     tty: true
+#     environment:
+#       - DISPLAY=${DISPLAY}
+#       - QT_X11_NO_MITSHM=1
+#     cap_add:
+#       - SYS_NICE
+#     ulimits:
+#       rtprio: 99
+#       rttime: -1
+#       memlock: 8428281856
+#     network_mode: host
+#     devices:
+#       - "/dev/dri:/dev/dri"
+#     volumes:
+#       - /home/yu/RCM_mujoco_ros2:/home/user/humble_ws/src
+#       - /tmp/.X11-unix:/tmp/.X11-unix:rw
+#       - /tmp/.docker.xauth:/tmp/.docker.xauth:rw

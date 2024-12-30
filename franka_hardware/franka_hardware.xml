@@ -1,0 +1,43 @@
+<library path="franka_hardware">
+    <!-- <class name="franka_hardware/FrankaHardwareInterface"
+           type="franka_hardware::FrankaHardwareInterface"
+           base_class_type="hardware_interface::SystemInterface">
+
+        <description>
+            Hardware interface for Franka Emika research robots
+        </description>
+    </class> -->
+    <class name="franka_hardware/FrankaMultiHardwareInterface"
+           type="franka_hardware::FrankaMultiHardwareInterface"
+           base_class_type="hardware_interface::SystemInterface">
+
+        <description>
+            Hardware interface for multiple Franka Emika research robots
+        </description>
+    </class>
+    <!-- <class name="franka_hardware/FrankaMujocoHardwareInterface"
+           type="franka_hardware::FrankaMujocoHardwareInterface"
+           base_class_type="hardware_interface::SystemInterface">
+
+        <description>
+            Hardware interface for mujoco sim of Franka Emika research robots
+        </description>
+    </class> -->
+    <class name="franka_hardware/FrankaMujocoMultiHardwareInterface"
+           type="franka_hardware::FrankaMujocoMultiHardwareInterface"
+           base_class_type="hardware_interface::SystemInterface">
+
+        <description>
+            Hardware interface for mujoco sim of multiple Franka Emika research robots
+        </description>
+    </class>
+
+    <class name="franka_hardware/GarmiMujocoHardwareInterface"
+           type="franka_hardware::GarmiMujocoHardwareInterface"
+           base_class_type="hardware_interface::SystemInterface">
+
+        <description>
+            Hardware interface for mujoco sim of Garmi
+        </description>
+    </class>
+</library>
