@@ -212,7 +212,7 @@
                     <body name="panda_link8" pos="0 0 0.107" gravcomp="1">
                       <site name="panda_flange_site" pos="0 0.0 0.0" size=".01 .01 .01" type="ellipsoid" rgba=".8 .2 .1 0"/>
                       <body name="endowrist_flange" pos="-0.035 0.61 0.08 " quat="-0.5 0.5 -0.5 0.5" gravcomp="1">
-                        <inertial mass="0.5" pos="0.0 0 0" diaginertia="0.001 0.001 0.001"/>
+                        <inertial mass="0.5" pos="0.0 0 0" diaginertia="0.1 0.1 0.1"/>
                         <geom mesh="EndowristObj" material="white" class="visual" size="1  1  1 "/>
                         <geom mesh="endowrist_c" class="collision" size="1  1  1 "/>
                         <site name="visual_tcp_site" pos="0.0 0.0175 0.04" size=".01 .01 .01" type="sphere" rgba="1 0 0 1"/>

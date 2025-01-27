@@ -10,7 +10,7 @@
 
 class Recorder {
  public:
-  Recorder(double t_rec, double sampleTime, int NoDataRec = 10, std::string name = "DATA");
+  Recorder(double t_rec, double sampleTime, int NoDataRec = 20, std::string name = "DATA");
   ~Recorder();
 
   void addToRec(int value);

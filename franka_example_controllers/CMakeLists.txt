@@ -40,7 +40,9 @@ add_library(
         src/model_example_controller.cpp
         src/multi_joint_impedance_example_controller.cpp
         src/dual_joint_velocity_example_controller.cpp
+        src/RCM_projected_inverse_dynamics_controller.cpp
         src/recorder.cpp
+        src/desired_trajectory.cpp
 )
 target_include_directories(
         ${PROJECT_NAME}

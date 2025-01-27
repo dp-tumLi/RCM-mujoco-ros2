@@ -34,7 +34,7 @@ controller_manager:
 
     model_example_controller:
       type: franka_example_controllers/ModelExampleController
-    
+
 
 franka_robot_state_broadcaster:
   ros__parameters:
@@ -121,3 +121,4 @@ joint_velocity_example_controller:
 cartesian_velocity_example_controller:
   ros__parameters:
     arm_id: panda
+

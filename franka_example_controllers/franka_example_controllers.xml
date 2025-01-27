@@ -60,4 +60,10 @@
             The franka model example controller evaluates and prints the dynamic model ofFranka Robotics Robots.
         </description>
     </class>
+    <class name="franka_example_controllers/ProjectedInverseDynamicsController"
+           type="franka_example_controllers::ProjectedInverseDynamicsController" base_class_type="controller_interface::ControllerInterface">
+        <description>
+            RCM projected inverse dynamics controller.
+        </description>
+    </class>
 </library>

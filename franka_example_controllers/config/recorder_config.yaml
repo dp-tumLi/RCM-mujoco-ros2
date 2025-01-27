@@ -1,5 +1,5 @@
 recorder:
   t_rec: 20.0
   sample_time: 0.001
-  no_data_rec: 5
+  no_data_rec: 10
   name: "DATA"
