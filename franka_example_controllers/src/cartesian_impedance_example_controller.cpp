@@ -215,7 +215,6 @@ controller_interface::return_type CartesianImpedanceExampleController::update(
     current_position = tcp_position;
     jacobian = jacobian_tcp;
 
-
     // Define the desired orientation using Euler angles (roll, pitch, yaw)
     double roll = -M_PI / 2;  // 45 degrees
     double pitch = 0.0; // 30 degrees

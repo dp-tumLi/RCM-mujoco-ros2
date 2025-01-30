@@ -115,72 +115,204 @@ controller_interface::return_type ProjectedInverseDynamicsController::update(
     Eigen::Map<const Vector7d> q(franka_robot_model_->getRobotState()->q.data());
     Vector6d error;
 
-    // Extract the flange pose
-    Eigen::Map<const Eigen::Matrix4d> flange_pose(franka_robot_model_->getPoseMatrix(franka::Frame::kFlange).data());
+
+    Eigen::Vector3d endowrist_offset(-0.035, 0.61, 0.08); // Endowrist displacement w.r.t. flange
+    Eigen::Quaterniond endowrist_orientation(-0.5, 0.5, -0.5, 0.5); // Endowrist orientation w.r.t. flange
+    Eigen::Vector3d tcp_offset(0.0, 0.0175, 0.04);
+
+    // Eigen::Map<const Eigen::Matrix4d> flange_pose(franka_robot_model_->getPoseMatrix(franka::Frame::kFlange).data());
+    std::array<double, 16> raw_pose = franka_robot_model_->getPoseMatrix(franka::Frame::kFlange);
+    Eigen::Matrix4d flange_pose = Eigen::Map<const Eigen::Matrix4d>(raw_pose.data());
     Eigen::Vector3d flange_position = flange_pose.block<3,1>(0,3); // Flange position
     Eigen::Matrix3d flange_rotation = flange_pose.block<3,3>(0,0); // Flange orientation
 
-    // Define the endowrist offset and orientation relative to the flange
-    Eigen::Vector3d endowrist_offset(-0.035, 0.61, 0.08); // Endowrist displacement w.r.t. flange
-    Eigen::Quaterniond endowrist_orientation(-0.5, 0.5, -0.5, 0.5); // Endowrist orientation w.r.t. flange
+    Eigen::Matrix4d T7endo = Eigen::Matrix4d::Identity();
+    T7endo.block<3,3>(0,0) = endowrist_orientation.toRotationMatrix();
+    T7endo.block<3,1>(0,3) = endowrist_offset;
 
-    // Compute the endowrist pose relative to the flange
-    Eigen::Matrix4d endowrist_pose_in_flange = Eigen::Matrix4d::Identity();
-    endowrist_pose_in_flange.block<3,3>(0,0) = endowrist_orientation.toRotationMatrix();
-    endowrist_pose_in_flange.block<3,1>(0,3) = endowrist_offset;
+    Eigen::Matrix4d Tendo_tcp = Eigen::Matrix4d::Identity();
+    Tendo_tcp.block<3,1>(0,3) = tcp_offset;
 
-    // Compute the endowrist pose in the base frame
-    Eigen::Matrix4d endowrist_pose_in_base = flange_pose * endowrist_pose_in_flange;
-    Eigen::Vector3d endowrist_position_in_base = endowrist_pose_in_base.block<3,1>(0,3);
-    Eigen::Matrix3d endowrist_rotation_in_base = endowrist_pose_in_base.block<3,3>(0,0);
+    Eigen::Matrix4d T0endo = flange_pose*T7endo;
+    Eigen::Matrix4d T7tcp = T7endo * Tendo_tcp;
+    Eigen::Matrix4d T0tcp = flange_pose*T7tcp;
 
-    // Transform the Jacobian from flange to endowrist
+    Eigen::Vector3d p0endo = T0endo.block<3,1>(0,3);
+    Eigen::Matrix3d R0endo = T0endo.block<3,3>(0,0);
+    Eigen::Vector3d p0tcp = T0tcp.block<3,1>(0,3);
+    Eigen::Matrix3d R0tcp = T0tcp.block<3,3>(0,0);
+
+    Eigen::Matrix3d R7tcp = T7tcp.block<3,3>(0,0);
+    Eigen::Vector3d p7tcp = T7tcp.block<3,1>(0,3);
     Eigen::Matrix<double, 6, 7> jacobian_flange(franka_robot_model_->getZeroJacobian(franka::Frame::kFlange).data());
-    Eigen::Matrix<double, 6, 6> adjoint_endowrist_inv = Eigen::Matrix<double, 6, 6>::Zero();
-    adjoint_endowrist_inv.block<3,3>(0,0) = endowrist_orientation.toRotationMatrix().transpose();
-    adjoint_endowrist_inv.block<3,3>(0,3) = endowrist_orientation.toRotationMatrix().transpose() * skewSymmetric(endowrist_offset);
-    adjoint_endowrist_inv.block<3,3>(3,3) = endowrist_orientation.toRotationMatrix().transpose();
-    Eigen::Matrix<double, 6, 7> jacobian_endowrist_virtual = adjoint_endowrist_inv * jacobian_flange;
-
-    // Transform the Jacobian from endowrist to TCP
-    Eigen::Vector3d tcp_offset(0.3, 0.0175, 0.04);
-    Eigen::Matrix<double, 6, 6> adjoint_endo2tcp_inv = Eigen::Matrix<double, 6, 6>::Zero();
-    adjoint_endo2tcp_inv.block<3,3>(0,0) = Eigen::Matrix3d::Identity();
-    adjoint_endo2tcp_inv.block<3,3>(0,3) = skewSymmetric(-tcp_offset);
-    adjoint_endo2tcp_inv.block<3,3>(3,3) = Eigen::Matrix3d::Identity();
-    Eigen::Matrix<double, 6, 7> jacobian_tcp = adjoint_endo2tcp_inv * jacobian_endowrist_virtual;
+    Eigen::Matrix<double, 6, 6> adTtcp7 = Eigen::Matrix<double, 6, 6>::Zero();
+    Eigen::Matrix4d Ttcp7 = T7tcp.inverse();
+    Eigen::Matrix3d Rtcp7 = Ttcp7.block<3,3>(0,0); 
+    Eigen::Vector3d ptcp7 = Ttcp7.block<3,1>(0,3);
+    adTtcp7.block<3,3>(0,0) = Rtcp7;
+    adTtcp7.block<3,3>(3,3) = Rtcp7;
+    adTtcp7.block<3,3>(0,3) = skewSymmetric(ptcp7) * Rtcp7;
 
 
-// Print the results
-// std::cout << "Flange Position: " << flange_position.transpose() << std::endl;
-// // std::cout << "Flange Orientation: " << Eigen::Quaterniond(flange_rotation).coeffs().transpose() << std::endl;
-// // std::cout << "Flange Jacobian: \n" << jacobian_flange << std::endl;
+Eigen::Vector3d endowrist_position = flange_position + flange_rotation * endowrist_offset; // Endowrist position
+Eigen::Matrix3d endowrist_rotation = flange_rotation * endowrist_orientation.toRotationMatrix(); // Endowrist orientation
+Eigen::Vector3d tcp_position = endowrist_position + endowrist_rotation * tcp_offset; // TCP position
 
-// std::cout << "Endowrist Position: " << endowrist_position.transpose() << std::endl;
-// // std::cout << "Endowrist Orientation: " << Eigen::Quaterniond(endowrist_rotation).coeffs().transpose() << std::endl;
+Eigen::Matrix<double, 6, 6> adTflange_tcp = Eigen::Matrix<double, 6, 6>::Zero();
+adTflange_tcp.block<3,3>(0,0) = Eigen::Matrix3d::Identity();
+adTflange_tcp.block<3,3>(3,3) = Eigen::Matrix3d::Identity();
+adTflange_tcp.block<3,3>(0,3) = skewSymmetric(Vector3d(0.005,0.61,0.0625));
+Eigen::Matrix<double, 6, 7> J_tcp = adTflange_tcp.inverse() * jacobian_flange;
 
-// std::cout << "TCP Position: " << tcp_position.transpose() << std::endl;
-// // std::cout << "TCP Jacobian: \n" << jacobian_tcp << std::endl;
+// std::cout<<"tcp_position: "<<tcp_position.transpose()<<" p0tcp:"<<p0tcp.transpose()<<std::endl;
 
-// std::cout << "ETA Position: " << eta_position.transpose() << std::endl;
-// // std::cout << "ETA Jacobian: \n" << jacobian_eta << std::endl;
+std::vector<franka::Frame> joint_frames = {
+    franka::Frame::kJoint1,
+    franka::Frame::kJoint2,
+    franka::Frame::kJoint3,
+    franka::Frame::kJoint4,
+    franka::Frame::kJoint5,
+    franka::Frame::kJoint6,
+    franka::Frame::kJoint7,
+};
 
-    current_position = endowrist_position_in_base;
-    jacobian = jacobian_endowrist_virtual;
+std::vector<Eigen::Matrix4d> joint_poses;
+for (const auto& joint_frame : joint_frames) {
+    Eigen::Map<const Eigen::Matrix4d> joint_pose(
+        franka_robot_model_->getPoseMatrix(joint_frame).data());
+    joint_poses.push_back(joint_pose);
+}
+
+Eigen::Vector3d p_flange = flange_position; // flange position
+Eigen::Vector3d p_tcp = tcp_position; // TCP position
+Eigen::Vector3d p_endo = endowrist_position; // Endowrist position
+Eigen::Matrix<double, 6, 7> geometric_jacobian_flange = Eigen::Matrix<double, 6, 7>::Zero();
+Eigen::Matrix<double, 6, 7> geometric_jacobian_tcp = Eigen::Matrix<double, 6, 7>::Zero();
+Eigen::Matrix<double, 6, 7> geometric_jacobian_endo = Eigen::Matrix<double, 6, 7>::Zero();
+for (size_t i = 0; i < joint_frames.size(); ++i) {
+    Eigen::Vector3d z_i = joint_poses[i].block<3,3>(0,0).col(2); // Joint axis
+    Eigen::Vector3d p_i = joint_poses[i].block<3,1>(0,3); // Joint position
+    Eigen::Vector3d J_linear = z_i.cross(p_flange - p_i); // Linear velocity contribution
+    Eigen::Vector3d J_angular = z_i; // Angular velocity contribution
+
+    geometric_jacobian_flange.block<3,1>(0,i) = J_linear;
+    geometric_jacobian_flange.block<3,1>(3,i) = J_angular;
+}
+
+for (size_t i = 0; i < joint_frames.size(); ++i) {
+    Eigen::Vector3d z_i = joint_poses[i].block<3,3>(0,0).col(2); // Joint axis
+    Eigen::Vector3d p_i = joint_poses[i].block<3,1>(0,3); // Joint position
+    Eigen::Vector3d J_linear = z_i.cross(p_tcp - p_i); // Linear velocity contribution
+    Eigen::Vector3d J_angular = z_i; // Angular velocity contribution
+
+    geometric_jacobian_tcp.block<3,1>(0,i) = J_linear;
+    geometric_jacobian_tcp.block<3,1>(3,i) = J_angular;
+}
+
+for (size_t i = 0; i < joint_frames.size(); ++i) {
+    Eigen::Vector3d z_i = joint_poses[i].block<3,3>(0,0).col(2); // Joint axis
+    Eigen::Vector3d p_i = joint_poses[i].block<3,1>(0,3); // Joint position
+    Eigen::Vector3d J_linear = z_i.cross(p_endo - p_i); // Linear velocity contribution
+    Eigen::Vector3d J_angular = z_i; // Angular velocity contribution
+
+    geometric_jacobian_endo.block<3,1>(0,i) = J_linear;
+    geometric_jacobian_endo.block<3,1>(3,i) = J_angular;
+}
+
+Eigen::Matrix<double, 6, 7> jacobian_tcp = adTtcp7 * geometric_jacobian_flange;
+
+Eigen::Matrix<double, 6, 6> adT7endo = Eigen::Matrix<double, 6, 6>::Zero();
+adT7endo.block<3,3>(0,0) = endowrist_orientation.toRotationMatrix();
+adT7endo.block<3,3>(3,3) = endowrist_orientation.toRotationMatrix();
+adT7endo.block<3,3>(0,3) = skewSymmetric(endowrist_offset) * endowrist_orientation.toRotationMatrix();
+
+Eigen::Matrix<double, 6, 7> jacobian_endo = adT7endo * geometric_jacobian_flange;
 
 
-    Eigen::Matrix<double, 6, 6> AdT_cr = Eigen::Matrix<double, 6, 6>::Zero();
-    AdT_cr.block<3,3>(0,0) = Eigen::Matrix3d::Identity();
-    AdT_cr.block<3,3>(0,3) = skewSymmetric(flange_position - pc_)*Eigen::Matrix3d::Identity();
-    AdT_cr.block<3,3>(3,3) = Eigen::Matrix3d::Identity();
+// Twist adjoint transformation validation
+Vector6d V_0flange = geometric_jacobian_flange * qD;
+Vector6d V_0endo = geometric_jacobian_endo * qD;
+Vector6d V_0tcp = geometric_jacobian_tcp * qD;
 
-    Eigen::Matrix<double, 6, 6> R_block_Nr = Eigen::Matrix<double, 6, 6>::Zero();
-    R_block_Nr.block<3,3>(0,0) = flange_rotation;
-    R_block_Nr.block<3,3>(3,3) = flange_rotation;
+Eigen::Matrix<double, 6, 6> adT87_computed 
+      = geometric_jacobian_endo*geometric_jacobian_flange.transpose()
+      *(geometric_jacobian_flange*geometric_jacobian_flange.transpose()).inverse();
+Vector6d V_0endo_adj_computed = Vector6d::Zero();
+Vector6d V_0endo_adj = Vector6d::Zero();
+V_0endo_adj_computed = adT87_computed * V_0flange;
+V_0endo_adj = adT7endo * V_0flange;
+
+
+// std::cout<< "T7tcp "<<T7tcp<<std::endl;
+
+// std::cout<<"adT87_computed: \n"<<adT87_computed<<std::endl;
+// std::cout<<"adT87: \n"<<adT7endo.inverse()<<std::endl;
+
+// auto T78 = flange_pose.inverse()*T0endo;
+// std::cout<<"T78: \n"<<T78<<std::endl;
+// auto p87_computed = adT87_computed.block<3,3>(0,3)*adT87_computed.block<3,3>(0,0).transpose();
+// std::cout<<"p87_computed: \n"<<p87_computed<<std::endl;
+
+// Eigen::Matrix<double, 4, 4> Vhat_0endo = Eigen::Matrix<double, 4, 4>::Zero();
+// Vhat_0endo.block<3,3>(0,0) = skewSymmetric(V_0endo.block<3,1>(0,0));
+// Vhat_0endo.block<3,1>(0,3) = V_0endo.block<3,1>(0,0);
+// Eigen::Matrix<double, 4, 4> Vhat_0flange = Eigen::Matrix<double, 4, 4>::Zero();
+// Vhat_0flange.block<3,3>(0,0) = skewSymmetric(V_0flange.block<3,1>(0,0));
+// Vhat_0flange.block<3,1>(0,3) = V_0flange.block<3,1>(0,0);
+// Eigen::Matrix<double, 4, 4> Vhat_0endo_adj = T7endo * Vhat_0flange * T7endo.inverse();
+
+// std::cout<<"Vhat_0endo: \n"<<Vhat_0endo<<"\nVhat_0endo_adj: \n"<<Vhat_0endo_adj<<std::endl;
+
+
+// std::cout<<"V_0endo: "<<V_0endo.transpose()<<" V_0endo_adj_computed: "<<V_0endo_adj_computed.transpose()<<" V_0endo_adj: "<<V_0endo_adj.transpose()<<std::endl;
+// std::cout<<"V_0tcp: "<<V_0tcp.transpose()<<" V_0tcp_adj: "<<V_0tcp_adj.transpose()<<std::endl;
+
+
+
+// Print the manually computed Jacobian
+// std::cout << "Geometric Jacobian: \n" << geometric_jacobian_tcp << std::endl;
+// std::cout << "Jacobian TCP: \n" << J_tcp << std::endl;
+
+// std::cout << "Geometric Jacobian_endo: \n" << geometric_jacobian_endo << std::endl;
+// std::cout << "Jacobian Endo: \n" << jacobian_endo << std::endl;
+
+// std::cout<<"jacobian_flange: \n"<<jacobian_flange<<std::endl;
+// std::cout<<"geometric_jacobian_flange: \n"<<geometric_jacobian_flange<<std::endl;
+
+// std::cout << "J_tcp: \n" << J_tcp << std::endl;
+// std::cout << "ERROR: \n" << (geometric_jacobian_tcp - jacobian_tcp).norm() << std::endl;
+
+// std::cout<<"R7tcp\n"<<T7tcp.block<3,3>(0,0)<<std::endl;
+// std::cout<<"R7tcp_1\n"<<endowrist_orientation.toRotationMatrix()<<std::endl;
+// std::cout<<"p7tcp"<<T7tcp.block<3,1>(0,3).transpose()<<std::endl;
+// std::cout<<"p7tcp_1"<<tcp_offset.transpose()<<std::endl;
+
+
+    current_position = tcp_position;
+    jacobian = geometric_jacobian_tcp;
+
+
+    Eigen::Matrix<double, 6, 7> J_c_N = Eigen::Matrix<double, 6, 7>::Zero();
+    for (size_t i = 0; i < joint_frames.size(); ++i) {
+        Eigen::Vector3d z_i = joint_poses[i].block<3,3>(0,0).col(2); // Joint axis
+        Eigen::Vector3d p_i = joint_poses[i].block<3,1>(0,3); // Joint position
+        Eigen::Vector3d J_linear = z_i.cross(pc_ - p_i); // Linear velocity contribution
+        Eigen::Vector3d J_angular = z_i; // Angular velocity contribution
+
+        J_c_N.block<3,1>(0,i) = J_linear;
+        J_c_N.block<3,1>(3,i) = J_angular;
+    }
+    Eigen::Matrix<double, 6, 6> AdT_c_flange = J_c_N*geometric_jacobian_flange.transpose()
+      *((geometric_jacobian_flange*geometric_jacobian_flange.transpose()).inverse());
+    
+    Eigen::Matrix<double, 6, 6> R_block_N_flange = Eigen::Matrix<double, 6, 6>::Zero();
+    R_block_N_flange.block<3,3>(0,0) = flange_rotation;
+    R_block_N_flange.block<3,3>(3,3) = flange_rotation;
 
     Eigen::Matrix<double, 6, 6> H = Eigen::Matrix<double, 6, 6>::Zero();
     H.block<2,2>(0,0) = Eigen::Matrix2d::Identity();
-    Eigen::Matrix<double, 6, 7> J_c = H*R_block_Nr.transpose()*AdT_cr*jacobian_flange;
+    Eigen::Matrix<double, 6, 7> J_c =
+       H*R_block_N_flange.transpose()*AdT_c_flange*geometric_jacobian_flange;
     Eigen::Matrix<double, 2, 7> A = J_c.block<2,7>(0,0);
 
     Eigen::MatrixXd Apinv;
@@ -223,11 +355,11 @@ controller_interface::return_type ProjectedInverseDynamicsController::update(
 
     Vector7d tau_arbitary; tau_arbitary.setZero();
     tau_arbitary = inertia*qcmd_ddot + coriolis;
-    tau_d <<  tau_arbitary;
+    tau_d <<  tauf;
     for (int i = 0; i < num_joints; ++i) {
       command_interfaces_[i].set_value(tau_d(i));
     }
-    // std::cout<<"time: "<<time.seconds()<<" tau_d: "<<tau_d.transpose()<<std::endl;
+    std::cout<<"time: "<<time.seconds()<<" tau_d: "<<tau_d.transpose()<<std::endl;
 
     // Check if Jacobian drops rank
     Eigen::JacobiSVD<Eigen::MatrixXd> svd(jacobian, Eigen::ComputeThinU | Eigen::ComputeThinV);
@@ -239,13 +371,9 @@ controller_interface::return_type ProjectedInverseDynamicsController::update(
     }
     
     recorder_->addToRec(time.seconds());
-    recorder_->addToRec(current_position);
+    recorder_->addToRec(p0tcp);
     Vector3d xdes = desired.head<3>();
     recorder_->addToRec(xdes);
-    recorder_->addToRec(flange_position);
-    // recorder_->addToRec(endowrist_position);
-    // recorder_->addToRec(flange_position);
-    // recorder_->addToRec(eta_position);
     recorder_->next();
 
 
@@ -320,9 +448,13 @@ CallbackReturn ProjectedInverseDynamicsController::on_activate(
   // desired_orientation = Quaterniond(endowrist_rotation); // Endowrist orientation
   desired_position = tcp_position; // TCP position
   pc_ = eta_position; // ETA position
+  prev_R78 = endowrist_orientation.toRotationMatrix(); // Previous endowrist orientation
   // desired_position(0) += 0.4; // Modify the x-coordinate
   // desired_position(1) += 0.45; // Modify the y-coordinate
   // desired_position(2) -= 0.3; // Set the z-coordinate to a specific value
+  // pc_(0) += 0.4; // Modify the x-coordinate
+  // pc_(1) += 0.45; // Modify the y-coordinate
+  // pc_(2) -= 0.3; // Set the z-coordinate to a specific value
 
   double pos_stiff = 1000.0;
   double rot_stiff = 200.0;

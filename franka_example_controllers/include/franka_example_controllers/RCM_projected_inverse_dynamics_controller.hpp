@@ -64,6 +64,7 @@ class ProjectedInverseDynamicsController : public controller_interface::Controll
   Vector7d desired_qn;
   Matrix4d desired;
   Eigen::Matrix<double, 6, 7> previous_jacobian_;
+  Eigen::Matrix<double, 3, 3> prev_R78;
   Vector3d pc_;
   Matrix6d stiffness;
   Matrix6d damping;

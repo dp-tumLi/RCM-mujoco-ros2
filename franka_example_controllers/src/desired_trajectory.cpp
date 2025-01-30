@@ -74,3 +74,9 @@ Eigen::Matrix3d skewSymmetric(const Eigen::Vector3d& v) {
            -v(1),  v(0),    0;
     return skew;
 }
+
+Eigen::Vector3d unskewSymmetric(const Eigen::Matrix3d& m) {
+    Eigen::Vector3d v;
+    v << m(2,1), m(0,2), m(1,0);
+    return v;
+}
